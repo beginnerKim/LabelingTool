@@ -27,20 +27,23 @@ class ImageViewer(QWidget):
     def __init__(self, parent:Optional[QWidget] = None):
         super().__init__(parent)
 
+        # params
+        self.__fitSize:bool = False # image를 widget size에 맞게 출력
 
-        # members
+
         self.__srcPixmap:Optional[QPixmap] = None
         self.__displayOffset = QPoint(0, 0) # offset from image center (pixel)
+        self.__zoomScale:float = 1.
 
         ## for mouse control
         self.__mouseButtonMask:int = Qt.MouseButton.NoButton
-        self.__mousePressStartPoint = QPoint(0, 0)
         self.__mouseMoveLastPoint = QPoint(0, 0)
 
 
 
         self.__displayPannel = QLabel()
         self.__displayPannel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.__displayPannel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.__displayPannel.mousePressEvent = self.__displayPannelMousePressEvent # override event
         self.__displayPannel.mouseReleaseEvent = self.__displayPannelMouseReleaseEvent
         self.__displayPannel.mouseMoveEvent = self.__displayPannelMouseMoveEvent
@@ -69,11 +72,22 @@ class ImageViewer(QWidget):
     def reset(self):
         self.__displayPannel.clear()
 
+        self.__fitSize = False
+        
         self.__srcPixmap = None
+        self.__displayOffset = QPoint(0, 0)
+        self.__zoomScale = 1.
+
+        self.__mouseButtonMask = Qt.MouseButton.NoButton
+        self.__mousePressStartPoint = QPoint(0, 0)
+        self.__mouseMoveLastPoint = QPoint(0, 0)
 
 
-    def setImage(self, image:np.ndarray):
+
+
+    def setImage(self, image:np.ndarray, fitSize:bool = False):
         self.reset()
+        self.__fitSize = fitSize
 
         qimage = QImage(image, image.shape[1], image.shape[0], image.strides[0], self.parsingImageFormat(image))
         self.__srcPixmap = QPixmap.fromImage(qimage)
@@ -83,20 +97,25 @@ class ImageViewer(QWidget):
     def __updateImage(self):
         if self.__srcPixmap is None: return
 
+        if self.__fitSize:
+            scaledPixmap = self.__srcPixmap.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio)
+        else:
+            scaledPixmap = self.__srcPixmap.scaled(self.size() * self.__zoomScale, Qt.AspectRatioMode.KeepAspectRatio)
+
         # crop for display
         cropRect = self.rect() # init rect by widget size
-        cropRect.moveCenter(self.__srcPixmap.rect().center() + self.__displayOffset) # move crop rect to center of image (with offset)
+        cropRect.moveCenter(scaledPixmap.rect().center() + self.__displayOffset) # move crop rect to center of image (with offset)
 
         ## adjust range
         if cropRect.left() < 0: cropRect.moveLeft(0)
         if cropRect.top() < 0: cropRect.moveTop(0)
-        if cropRect.right() > self.__srcPixmap.rect().right(): cropRect.moveRight(self.__srcPixmap.rect().right()-1)
-        if cropRect.bottom() > self.__srcPixmap.rect().bottom(): cropRect.moveBottom(self.__srcPixmap.rect().bottom())
+        if cropRect.right() > scaledPixmap.rect().right(): cropRect.moveRight(scaledPixmap.rect().right()-1)
+        if cropRect.bottom() > scaledPixmap.rect().bottom(): cropRect.moveBottom(scaledPixmap.rect().bottom())
 
-        self.__displayOffset = -self.__srcPixmap.rect().center() + cropRect.center() # re-calculate offset by adjsted crop range
+        self.__displayOffset = cropRect.center() - scaledPixmap.rect().center()# re-calculate offset by adjsted crop range
 
         ## do crop
-        image = self.__srcPixmap.copy(cropRect)
+        image = scaledPixmap.copy(cropRect)
 
         # set cropped pixmap to label
         self.__displayPannel.setPixmap(image)
@@ -117,5 +136,5 @@ if __name__ == "__main__":
 
     import cv2
     image = cv2.imread("D:\\Backups\\images\\Panel\\01. X2678_Bottom_Cam1\\Brightness\\Brightness_01-13-04_Cam1_OK.png", cv2.IMREAD_COLOR)
-    widget.setImage(image)
+    widget.setImage(image, True)
     app.exec_()
