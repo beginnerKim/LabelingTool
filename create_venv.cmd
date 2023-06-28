@@ -1,0 +1,4 @@
+set PIPENV_VENV_IN_PROJECT=true
+set PIPENV_IGNORE_VIRTUALENVS=1
+
+pipenv install
